@@ -21,7 +21,13 @@ fn main() {
         .add_plugin(ScreenFrameDiagnosticsPlugin)
         .add_startup_system(systems::setup)
         .add_startup_system(systems::spawn_player)
-        .add_system(systems::move_player)
-        .add_system(systems::camera_look_at.after(systems::move_player))
+        .add_systems(
+            (
+                systems::spawn_enemies,
+                systems::move_enemies,
+                systems::move_player,
+                systems::camera_look_at,
+            ).chain()
+        )
         .run();
 }

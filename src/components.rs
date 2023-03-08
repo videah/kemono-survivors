@@ -8,3 +8,6 @@ pub struct MainCamera;
 
 #[derive(Component)]
 pub struct LookAt;
+
+#[derive(Component)]
+pub struct Enemy;
