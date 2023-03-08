@@ -11,3 +11,12 @@ pub struct LookAt;
 
 #[derive(Component)]
 pub struct Enemy;
+
+#[derive(Component)]
+pub struct WhipWeapon;
+
+#[derive(Component)]
+pub struct Health(pub f32);
+
+#[derive(Component)]
+pub struct WhipDamaged;
