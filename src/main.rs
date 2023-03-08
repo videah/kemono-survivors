@@ -32,6 +32,7 @@ fn main() {
                 systems::whip_enemies,
                 systems::mark_xp_orbs,
                 systems::collect_items,
+                systems::animate_damage_indicators,
                 systems::camera_look_at,
             ).chain()
         )

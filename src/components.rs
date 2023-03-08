@@ -29,3 +29,9 @@ pub struct Collecting;
 
 #[derive(Component)]
 pub struct AuraEffect;
+
+#[derive(Component)]
+pub struct DamageIndicator {
+    pub damage: f32,
+    pub timer: Timer,
+}

@@ -1,3 +1,4 @@
+use std::fmt::format;
 use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
 use rand::distributions::{WeightedIndex, Distribution};
@@ -23,6 +24,8 @@ pub fn setup(mut commands: Commands) {
     // Weapon timers
     commands.insert_resource(WeaponConfig {
         whip_timer: Timer::from_seconds(2.0, TimerMode::Repeating),
+        whip_min_damage: 4.0,
+        whip_max_damage: 8.0,
     });
 }
 
@@ -163,19 +166,19 @@ pub fn spawn_enemies(
             dir if dir.x < 0.0 => {
                 weights[2] += WEIGHT_FACTOR;
                 weights[3] -= WEIGHT_FACTOR;
-            },
+            }
             dir if dir.x > 0.0 => {
                 weights[2] -= WEIGHT_FACTOR;
                 weights[3] += WEIGHT_FACTOR;
-            },
+            }
             dir if dir.y > 0.0 => {
                 weights[0] += WEIGHT_FACTOR;
                 weights[1] -= WEIGHT_FACTOR;
-            },
+            }
             dir if dir.y < 0.0 => {
                 weights[0] -= WEIGHT_FACTOR;
                 weights[1] += WEIGHT_FACTOR;
-            },
+            }
             _ => {}
         }
 
@@ -278,12 +281,13 @@ pub fn move_enemies(
         let move_delta = direction * move_speed;
         enemy.0.translation += move_delta * time.delta_seconds();
     }
-
 }
 
 /// Whip enemies that are close to the player every 2 seconds.
 #[allow(clippy::type_complexity)]
 pub fn whip_enemies(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
     time: Res<Time>,
     mut config: ResMut<WeaponConfig>,
     mut set: ParamSet<(
@@ -313,8 +317,33 @@ pub fn whip_enemies(
                 let knockback_vector = Vec2::new(angle.cos(), angle.sin()) * knockback_distance;
                 enemy.translation += Vec3::new(knockback_vector.x, knockback_vector.y, 0.0);
 
-                // Damage the enemy
-                health.0 -= 5.0;
+                // Damage the enemy between the min and max damage values.
+                let damage = rand::thread_rng().gen_range(config.whip_min_damage..config.whip_max_damage).round();
+                health.0 -= damage;
+
+                // Spawn a damage indicator
+                commands.spawn((
+                    DamageIndicator {
+                        damage,
+                        timer: Timer::from_seconds(2.0, TimerMode::Once),
+                    },
+                    Text2dBundle {
+                        transform: Transform {
+                            translation: enemy_pos,
+                            ..default()
+                        },
+                        text: Text::from_section(
+                            format!("-{}", damage),
+                            TextStyle {
+                                font: asset_server.load("FiraSans-Bold.ttf"),
+                                font_size: 32.0,
+                                color: Color::rgb(0.8, 0.0, 0.0),
+                                ..default()
+                            },
+                        ),
+                        ..default()
+                    }
+                ));
             }
         }
     }
@@ -432,5 +461,33 @@ pub fn strobe_aura(
         let scale = 1.0 - scale;
 
         sprite.color.set_a((scale - 0.5).max(0.1));
+    }
+}
+
+pub fn animate_damage_indicators(
+    mut commands: Commands,
+    mut query: Query<(&mut Transform, &mut Text, Entity, &mut DamageIndicator)>,
+    time: Res<Time>,
+) {
+    for (mut transform, mut text, entity, mut indicator) in query.iter_mut() {
+        indicator.timer.tick(time.delta());
+
+        if indicator.timer.finished() {
+            // Remove the entity if the timer is finished.
+            commands.entity(entity).despawn();
+        } else {
+            // Move the indicator up.
+            transform.translation.y += 100.0 * time.delta_seconds();
+
+            // Move the indicator side to side.
+            let percent = indicator.timer.percent();
+            let scale = (percent * 10.0).sin() * 0.5 + 0.5;
+            transform.translation.x += (scale - 0.5) * 100.0 * time.delta_seconds();
+
+            // Fade the indicator out.
+            let percent = indicator.timer.percent();
+            let alpha = 1.0 - percent;
+            text.sections[0].style.color.set_a(alpha);
+        }
     }
 }
