@@ -19,4 +19,4 @@ pub struct WhipWeapon;
 pub struct Health(pub f32);
 
 #[derive(Component)]
-pub struct WhipDamaged;
+pub struct MovementDirection(pub Vec2);
