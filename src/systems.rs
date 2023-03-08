@@ -26,12 +26,15 @@ pub fn setup(mut commands: Commands) {
     });
 }
 
-pub fn spawn_player(mut commands: Commands) {
+pub fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let aura: Handle<Image> = asset_server.load("aura.png");
+
     commands.spawn((
         Player,
         LookAt,
         Health(100.0),
         MovementDirection(Vec2::ZERO),
+        WhipWeapon,
         SpriteBundle {
             sprite: Sprite {
                 color: Color::rgb(0.8, 0.7, 0.6),
@@ -39,8 +42,22 @@ pub fn spawn_player(mut commands: Commands) {
                 ..Default::default()
             },
             ..Default::default()
+        },
+    )).with_children(
+        |parent| {
+            parent.spawn((
+                AuraEffect,
+                SpriteBundle {
+                    texture: aura,
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(250.0, 250.0)),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+            ));
         }
-    ));
+    );
 }
 
 pub fn move_player(
@@ -271,7 +288,7 @@ pub fn whip_enemies(
     mut config: ResMut<WeaponConfig>,
     mut set: ParamSet<(
         Query<(&mut Transform, &mut Health, With<Enemy>)>,
-        Query<(&mut Transform, With<Player>)>,
+        Query<(&mut Transform, With<WhipWeapon>)>,
     )>,
 ) {
     config.whip_timer.tick(time.delta());
@@ -286,14 +303,13 @@ pub fn whip_enemies(
         };
 
         for (mut enemy, mut health, _) in set.p0().iter_mut() {
-
             let enemy_pos = enemy.translation;
             let distance = (enemy_pos - player_pos).length();
-            if distance < 100.0 {
+            if distance < 150.0 {
                 // Whip the enemy, knocking it back a bit based on its distance and angle from the player.
                 let direction = (enemy_pos - player_pos).normalize();
                 let angle = direction.y.atan2(direction.x);
-                let knockback_distance = (100.0 - distance) / 100.0 * 50.0; // Adjust the 50.0 value as needed.
+                let knockback_distance = (200.0 - distance) / 100.0 * 25.0; // Adjust the 50.0 value as needed.
                 let knockback_vector = Vec2::new(angle.cos(), angle.sin()) * knockback_distance;
                 enemy.translation += Vec3::new(knockback_vector.x, knockback_vector.y, 0.0);
 
@@ -307,11 +323,114 @@ pub fn whip_enemies(
 /// Remove entities that have 0 health.
 pub fn remove_dead(
     mut commands: Commands,
-    mut query: Query<(Entity, &Health), Without<Player>>,
+    mut query: Query<(Entity, &Health, &Transform), Without<Player>>,
 ) {
-    for (entity, health) in query.iter_mut() {
+    for (entity, health, pos) in query.iter_mut() {
         if health.0 <= 0.0 {
+            // Remove the entity and spawn an XP orb.
+            commands.entity(entity).despawn();
+            commands.spawn((
+                XpOrb(10.0),
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: Color::rgb(0.0, 0.0, 0.4),
+                        custom_size: Some(Vec2::new(8.0, 8.0)),
+                        ..Default::default()
+                    },
+                    transform: Transform {
+                        translation: Vec3::new(pos.translation.x, pos.translation.y, 0.0),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+            ));
+        }
+    }
+}
+
+pub fn mark_xp_orbs(
+    mut commands: Commands,
+    mut orbs: Query<(&mut Transform, Entity, With<XpOrb>, Without<Player>)>,
+    player: Query<(&Transform, With<Player>)>,
+) {
+    // If an XP orb is close to the player, mark it as collecting.
+    let player_pos = match player.get_single() {
+        Ok(player) => player.0.translation,
+        Err(e) => {
+            info!("No player found: {:?}", e);
+            return;
+        }
+    };
+
+    for (orb, entity, _, _) in orbs.iter_mut() {
+        let orb_pos = orb.translation;
+        let distance = (orb_pos - player_pos).length();
+        if distance < 100.0 {
+            // Mark the orb as being collected.
+            commands.entity(entity).insert(
+                Collecting {}
+            );
+        }
+    }
+}
+
+pub fn collect_items(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut items: Query<(&mut Transform, Entity, With<Collecting>, Without<Player>)>,
+    mut player: Query<(&Transform, With<Player>)>,
+) {
+    // Move collecting items towards the player.
+    let player_pos = match player.get_single_mut() {
+        Ok(player) => player.0.translation,
+        Err(e) => {
+            info!("No player found: {:?}", e);
+            return;
+        }
+    };
+
+    for (mut item, entity, _, _) in items.iter_mut() {
+        let direction = (player_pos - item.translation).normalize();
+        let distance = (item.translation - player_pos).length();
+
+        // Calculate move_speed based on distance from player
+        // Make sure it's never slower than the player's move speed.
+        let move_speed = (distance / 10.0).max(1.0) * 200.0;
+
+        let move_delta = (direction * move_speed) * time.delta_seconds();
+        item.translation += move_delta;
+
+        // If the item is close enough to the player, despawn it.
+        let distance = (item.translation - player_pos).length();
+        if distance < 10.0 {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+pub fn strobe_aura(
+    config: Res<WeaponConfig>,
+    mut query: Query<(&mut Sprite, With<AuraEffect>)>,
+) {
+    for (mut sprite, _) in query.iter_mut() {
+        let percent = config.whip_timer.percent();
+        // let scale = (time * 10.0).sin() * 0.5 + 0.5;
+
+        // Have the aura scale up and down.
+        // When percent is zero the aura should be going down
+        // When the percent is 50 the aura should be going up
+        // When the percent is 100 the aura should be going down
+        let scale = if percent < 0.5 {
+            // Going down
+            percent * 2.0
+        } else {
+            // Going up
+            (1.0 - percent) * 2.0
+        };
+
+        // Invert the scale so that the aura is smaller when the whip is charging.
+        let scale = 1.0 - scale;
+
+        sprite.color.set_a((scale - 0.5).max(0.1));
     }
 }

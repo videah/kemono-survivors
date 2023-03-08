@@ -28,7 +28,10 @@ fn main() {
                 systems::spawn_enemies,
                 systems::move_enemies,
                 systems::move_player,
+                systems::strobe_aura,
                 systems::whip_enemies,
+                systems::mark_xp_orbs,
+                systems::collect_items,
                 systems::camera_look_at,
             ).chain()
         )

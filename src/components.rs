@@ -20,3 +20,12 @@ pub struct Health(pub f32);
 
 #[derive(Component)]
 pub struct MovementDirection(pub Vec2);
+
+#[derive(Component)]
+pub struct XpOrb(pub f32);
+
+#[derive(Component)]
+pub struct Collecting;
+
+#[derive(Component)]
+pub struct AuraEffect;
